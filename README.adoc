@@ -1,146 +1,19 @@
-= Gradle Test Kotlin Extensions
-:toc:
-:github-repo-id: gradle-test-kotlin-extensions
-:uri-java-ServiceLoader: https://docs.oracle.com/javase/8/docs/api/java/util/ServiceLoader.html
-:uri-GradleRunner: https://docs.gradle.org/current/javadoc/org/gradle/testkit/runner/GradleRunner.html
-:uri-gradle-userguide: https://docs.gradle.org/current/userguide
-:uri-testkit: {uri-gradle-userguide}/test_kit.html
-:uri-build-status-image: https://circleci.com/gh/mkobit/{github-repo-id}/tree/master.svg?style=svg
-:circle-ci-status-badge: image:{uri-build-status-image}["CircleCI", link="https://circleci.com/gh/mkobit/{github-repo-id}/tree/master"]
-:uri-version-badge-image: https://api.bintray.com/packages/mkobit/gradle/{github-repo-id}/images/download.svg
-:uri-bintray-package: https://bintray.com/mkobit/gradle/{github-repo-id}/_latestVersion
-:uri-zenhub-badge: https://raw.githubusercontent.com/ZenHubIO/support/master/zenhub-badge.png
-:version-badge: image:{uri-version-badge-image}["Latest Release Version", link="{uri-bintray-package}"]
-:zenhub-badge: image:{uri-zenhub-badge}["ZenHub Badge", link="https://www.zenhub.com/"]
+= Missing enclosing class
 
-{version-badge}
-{circle-ci-status-badge}
-{zenhub-badge}
+- Run `./gradlew test`
+- `javap -verbose 'build/classes/kotlin/test/com/mkobit/gradle/test/kotlin/io/FileContextTest$DirectoryContextTest$FileActionMaybeCreate$test$1$1$1$1.class'`
 
-Kotlin extensions and utilities for testing Gradle projects.
+```
+EnclosingMethod: #54.#56                // com.mkobit.gradle.test.kotlin.io.FileContextTest$DirectoryContextTest$FileActionMaybeCreate$test$1$1$1.call
+```
 
-== Usage
+However, `FileContextTest$DirectoryContextTest$FileActionMaybeCreate$test$1$1$1.class` doesn't exist at all.
 
-.Add as a dependency
-[source, kotlin]
-----
-repositories {
-  jcenter()
-}
+The consequence is, when we try to analyze `FileContextTest$DirectoryContextTest$FileActionMaybeCreate$test$1$1$1$1.class` and invoke its `getEnclosingClass`, an exception will be thrown:
 
-dependencies {
-  testImplementation("com.mkobit.gradle.test:gradle-test-kotlin-extensions:x.x.x")
-}
-----
-
-[[gradleRunner-extensions]]
-== GradleRunner extensions
-
-link:{uri-GradleRunner}[GradleRunner] can be used to execute builds using the link:{uri-testkit}[Gradle TestKit].
-There are a few extensions that make the setup and execution with Kotlin clearer, more concise, and composable.
-
-=== Setup Files in Project Directory
-
-.Setting up file system resources
-[source, kotlin]
-----
-import org.gradle.testkit.runner.BuildResult
-import org.gradle.testkit.runner.GradleRunner
-import java.io.File
-import com.mkobit.gradle.test.kotlin.testkit.runner.setupProjectDir
-
-internal class FunctionalTests {
-  @Test
-  internal fun `file system manipulation`() {
-    val tempDir: File = createTempDir()
-    val buildResult = GradleRunner.create().withProjectDir(tempDir).setupProjectDir {
-       file("settings.gradle") { content = "// settings.gradle".toByteArray()}
-       file("build.gradle") { content = "// build.gradle".toByteArray() }
-       directory("src/main/java") {
-         file("MainClass.java") { content = "public class Hello {}".toByteArray() }
-         directory("com/mkobit/") {
-           file("NestedDude.java") {
-             content = "package com.mkobit;${System.lineSeparator()}".toByteArray()
-             append("public class NestedDude {}${System.lineSeparator()}".toByteArray())
-             append("// Additional appended content${System.lineSeparator()}".toByteArray())
-           }
-         }
-       }
-     }.build()
-    // Assert on BuildResult
-  }
-}
-----
-
-The `file` and `directory` methods can take additional options to `Create`, `Get`, or `MaybeCreate`.
-See the `com.mkobit.gradle.test.kotlin.io.FileAction` for other options.
-
-There are also a few `String.invoke` methods to possibly provide a more friendly DSL.
-
-.Setting up file system resources with DSL friendly methods
-[source, kotlin]
-----
-import org.gradle.testkit.runner.BuildResult
-import org.gradle.testkit.runner.GradleRunner
-import java.io.File
-import com.mkobit.gradle.test.kotlin.testkit.runner.build
-import com.mkobit.gradle.test.kotlin.testkit.runner.buildAndFail
-import com.mkobit.gradle.test.kotlin.testkit.runner.setupProjectDir
-import com.mkobit.gradle.test.kotlin.io.Original
-
-internal class FunctionalTests {
-  @Test
-  internal fun `file system manipulation`() {
-    val tempDir: File = createTempDir()
-    val buildResult = GradleRunner.create().withProjectDir(tempDir).setupProjectDir {
-       "settings.gradle"(content = "// settings.gradle")
-       "build.gradle"(content = "// build.gradle")
-       "src/main/java" {
-         "MainClass.java"(content = "public class Hello {}")
-         "com/mkobit/" {
-           // 'Original' constant here means to not modify any existing content
-           "NestedDude.java"(content = Original) {
-             content = "package com.mkobit;${System.lineSeparator()}".toByteArray()
-             append("public class NestedDude {}${System.lineSeparator()}".toByteArray())
-             append("// Additional appended content${System.lineSeparator()}".toByteArray())
-           }
-         }
-       }
-     }.build()
-    // Assert on BuildResult
-  }
-}
-----
-
-=== Command Line Management
-
-NOTE: These APIs are still experimental and are likely to change after some use.
-      They don't provide a complete experience for fully managing command-line arguments right now and feel like a half-way solution.
-      This area will be built upon on the future with better support and more use cases.
-
-[source, kotlin]
-----
-import com.mkobit.gradle.test.kotlin.testkit.runner.build
-import com.mkobit.gradle.test.kotlin.testkit.runner.buildAndFail
-import com.mkobit.gradle.test.kotlin.testkit.runner.info
-import com.mkobit.gradle.test.kotlin.testkit.runner.projectProperties
-import com.mkobit.gradle.test.kotlin.testkit.runner.stacktrace
-import com.mkobit.gradle.test.kotlin.testkit.runner.systemProperties
-
-internal class FunctionalTests {
-
-  @Test
-  internal fun `CLI management`() {
-    val gradleRunner = GradleRunner.create().apply {
-      info = true
-      stacktrace = true
-      projectProperties = mapOf("key1" to "prop1")
-      systemProperties = mapOf("key2" to "value2")
-    }
-    // additional setup and execution
-    val firstBuild = gradleRunner.build("test", "--tests", "my.test", "assemble")
-    // Second build reuses all previous settings that were applied, but does not include arguments from previous `build(...)` invocation
-    val secondBuild = gradleRunner.buildAndFail("test", "--tests", "other.test", "assemble")
-  }
-}
-----
+```
+Caused by: java.lang.NoClassDefFoundError: com/mkobit/gradle/test/kotlin/io/FileContextTest$DirectoryContextTest$FileActionMaybeCreate$test$1$1$1
+	at java.lang.Class.getEnclosingMethod0(Native Method)
+	at java.lang.Class.getEnclosingMethodInfo(Class.java:1072)
+	at java.lang.Class.getEnclosingClass(Class.java:1272)
+```
